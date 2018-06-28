@@ -1,0 +1,73 @@
+#!/usr/bin/perl -w
+
+use strict;
+use Date::Parse;
+use Data::Dumper;
+use XML::TreePP;
+use Time::Format qw(%time);
+
+my $log=$ARGV[0];
+my $gpx=$ARGV[1];
+my $out=$ARGV[2];
+
+$ENV{TZ}="UTC";
+
+# H Field S signed:0,0,0,0,0,0
+# H Field S predictor:0,0,0,0,0,0
+# H Field S encoding:1,1,7,7,7,1
+# H Firmware type:Cleanflight
+# H Firmware revision:INAV 1.9.1 (03a5c1922) OMNIBUSF4PRO_LEDSTRIPM5
+# H Firmware date:Apr 21 2018 13:15:03
+# H Log start datetime:2018-06-16T13:10:49.264+00:00
+# H Craft name:
+# H P interval:1/1
+# H minthrottle:1150
+
+sub readabstime {
+	my ($log) = @_;
+	open(I, $log);
+	while(<I>) {
+		chomp();
+		return undef if (!/^H/);
+		if (/^H Log start datetime:(.*)$/) {
+			my $t=str2time($1);
+			return $t;
+		}
+	}
+	close(I);
+	return undef;
+}
+
+my $absstart=readabstime($log);
+if (!defined($absstart)) {
+	printf(STDERR "Could not absolute start time from log\n");
+	exit(-1);
+}
+
+my $tpp=XML::TreePP->new();
+my $xml=$tpp->parsefile($gpx);
+
+if (!defined($xml->{gpx}{trk}{trkseg}{trkpt})) {
+	printf("No gpx -> trk -> trkseg -> trkpt\n");
+	exit(0);
+}
+
+my $start;
+
+foreach my $pt ( @{$xml->{gpx}{trk}{trkseg}{trkpt}} ) {
+	my $t=str2time($pt->{time});
+	if (!defined($start)) {
+		$start=$t;
+	}
+	my $new=$t-$start+$absstart;
+	# $time{'yyyy/mm/dd hh:mm:ss.mmm'}          2003/06/05 13:02:14.171
+
+	#printf("Old: %s New: %s\n", $pt->{time},
+	#$time{'yyyy-mm-ddThh:mm:ss.mmm', $new});
+	$pt->{time}=$time{'yyyy-mm-ddThh:mm:ss.mmm', $new};
+}
+
+open(O, ">" . $out);
+print O $tpp->write($xml);
+close(O);
+

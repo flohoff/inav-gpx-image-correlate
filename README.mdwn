@@ -1,0 +1,47 @@
+
+GPS Timestamp corrector for iNAV Blackbox gpx tracks
+====================================================
+
+The problem with Blackbox exported GPX tracks is that the
+Blackbox logs dont contain an absolute timestamp but only
+relative timestamps to boot of the flight controller.
+
+So when using 
+
+    blackbox_decode LOG00013.TXT
+
+from the [cleanflight blackbox-tools](https://github.com/cleanflight/blackbox-tools) you will get
+an gpx track with mapped timestamps to 2000-01-01 + uptime.
+
+    <trkpt lat="51.8860612" lon="8.3251832"><ele>66</ele><time>2000-01-01T00:03:03.579096Z</time></trkpt>
+    <trkpt lat="51.8860612" lon="8.3251832"><ele>66</ele><time>2000-01-01T00:03:03.609124Z</time></trkpt>
+
+These are not usable for tagging pictures/aerials with [gpscorrelate](http://freefoote.dview.net/linux/gpscorrelate).
+
+Using the `correctgps` from this repo the timestamps will be corrected to the absolute timestamp. For
+this the iNAV Blackbox log needs to contain an absolute timestamp in the ASCII header which will most likely
+be the case when the GPS/FC had a lock when arming:
+
+    [...]
+    H Field S encoding:1,1,7,7,7,1
+    H Firmware type:Cleanflight
+    H Firmware revision:INAV 1.9.1 (03a5c1922) OMNIBUSF4PRO_LEDSTRIPM5
+    H Firmware date:Apr 21 2018 13:15:03
+    H Log start datetime:2018-06-16T13:10:49.264+00:00
+    H Craft name:
+    H P interval:1/1
+    [ ... ]
+
+The full run to tag images would be:
+
+    blackbox_decode LOG00013.TXT     
+    correctgpx LOG00013.TXT LOG00013.01.gps.gpx LOG00013.01.gps.corrected.gpx
+    gpscorrelate -z +2 -O +36 -v -g LOG00013.01.gps.corrected.gpx *.JPG
+
+Where `LOG00013.TXT` would be your flight controllers blackbox file. 
+With this call `gpscorrelate` is configured for a timezone offset of +2 Hours
+which is CEST and 36 Seconds time offset for the camera. To get the Camera offset
+you should let the camera take a picture of an GPS Receiver before or directly
+after flight. Difference between the cameras exif meta tags and the visually seen
+time is your offset.
+
